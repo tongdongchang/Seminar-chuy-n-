@@ -13,6 +13,11 @@ st.set_page_config(
     layout="centered"
 )
 
+# Khởi tạo session state để theo dõi trạng thái
+if 'last_analyzed' not in st.session_state:
+    st.session_state.last_analyzed = None
+if 'user_input' not in st.session_state:
+    st.session_state.user_input = ""
 
 # ==========================
 # KHỞI TẠO MODEL
@@ -120,13 +125,7 @@ def main():
     # Header
     st.title("😊 Trợ lý phân loại cảm xúc tiếng Việt")
     st.markdown("---")
-    st.markdown("""
-        <style>
-        .stTextArea [data-baseweb="textarea"] {
-            border-color: #cccccc !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
+    
     # Load model với progress bar
     with st.spinner("Đang khởi tạo model..."):
         classifier = load_model()
@@ -137,33 +136,31 @@ def main():
 
     # Khu vực nhập liệu
     st.subheader("📝 Nhập câu tiếng Việt cần phân loại")
-    st.markdown("""
-        <style>
-        textarea:focus {
-            border: 1px solid #ccc !important;
-            box-shadow: none !important;
-        }
-        </style>
-    """, unsafe_allow_html=True)
+    
+    # Sử dụng session state để giữ giá trị textarea
     user_input = st.text_area(
         "Nhập câu của bạn tại đây:",
         placeholder="Ví dụ: Hôm nay tôi rất vui...",
         height=100,
-        value=""  # đảm bảo không phải None
+        key="input_text"  # Thêm key để quản lý widget
     )
-
+    
     # Nút phân loại
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        analyze_btn = st.button("🔍 Phân loại cảm xúc", use_container_width=True)
+        analyze_btn = st.button("🔍 Phân loại cảm xúc", use_container_width=True, type="primary")
 
     # Xử lý khi nhấn nút phân loại
     if analyze_btn:
-        if not user_input.strip():
+        st.session_state.last_analyzed = user_input
+        st.session_state.user_input = user_input
+        
+        if not user_input or not user_input.strip():
             st.warning("⚠️ Vui lòng nhập câu trước khi phân tích!")
+            st.stop()
         elif len(user_input.strip()) < 3:
             st.warning("⚠️ Câu quá ngắn, vui lòng nhập ít nhất 3 ký tự!")
-
+            st.stop()
         else:
             with st.spinner("Đang phân tích cảm xúc..."):
                 # Tiền xử lý văn bản
@@ -198,8 +195,10 @@ def main():
                         st.error(f"**Cảm xúc:** {label_map[sentiment]}")
                     else:
                         st.info(f"**Cảm xúc:** {label_map[sentiment]}")
+                    
                     st.write(f"**Độ tin cậy:** {score:.2%}")
                     st.write(f"**Câu đã xử lý:** {processed_text}")
+                    st.write(f"**Câu gốc:** {user_input}")
 
                     # Lưu vào database
                     save_to_db(user_input, sentiment)
@@ -208,7 +207,12 @@ def main():
 
                 except Exception as e:
                     st.error(f"❌ Lỗi khi phân tích: {str(e)}")
-
+    
+    # Hiển thị lại kết quả lần trước nếu có và không phải là lần nhấn đầu tiên
+    elif st.session_state.last_analyzed and st.session_state.last_analyzed != "":
+        st.markdown("---")
+        st.info("ℹ️ Kết quả phân tích lần trước vẫn được hiển thị bên dưới.")
+    
     # Hiển thị lịch sử
     st.markdown("---")
     st.subheader("📊 Lịch sử phân loại")
